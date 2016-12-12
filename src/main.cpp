@@ -54,6 +54,20 @@ void readInfra() {
   }
 }
 
+bool markIsRight() {
+  if (ir_sensors[2] && ir_sensors[4] || ir_sensors[3] && ir_sensors[4]) {
+    return true;
+  }
+  return false;
+}
+
+bool markIsLeft() {
+  if (ir_sensors[2] && ir_sensors[0] || ir_sensors[3] && ir_sensors[0]) {
+    return true;
+  }
+  return false;
+}
+
 // /* indicates if any of the sensors is on the line */
 // bool lineAhead() {
 //   bool res = 0;
