@@ -1,7 +1,7 @@
 #include <Arduino.h>
 #include <Servo.h>
 
-#define button_pin 9
+#define button_pin 2
 #define first_infra 3
 
 Servo left;
@@ -9,6 +9,7 @@ Servo right;
 
 bool ir_sensors[5];
 bool start = false;
+bool find_middle = false;
 
 bool buttonDown() { return !digitalRead(button_pin); }
 
@@ -89,15 +90,33 @@ void loop() {
     stop();
     return;
   }
-
-  if (ir_sensors[2]) {
-    forward(200);
-  } else if (ir_sensors[1]) {
-    turnCurve(-70);
-  } else if (ir_sensors[3]) {
-    turnCurve(70);
-  } else { // finding line
-    turn90(-30);
+  if (find_middle)
+  {
+    if (ir_sensors[2])
+      find_middle = false;
+    else
+      return;
   }
-  delay(1);
+
+  if (ir_sensors[0]){
+    turn90(-140);
+    find_middle = true;
+    delay(50);
+  }else if (ir_sensors[4])  {
+    turn90(140);
+    find_middle = true;
+    delay(50);
+  }else if (ir_sensors[1]) {
+    turnCurve(-30,50);
+  } else if (ir_sensors[3]) {
+    turnCurve(30,50);
+  } else if (ir_sensors[2]) {
+    forward(150);
+  } else { // finding line
+    //turn90(-30);
+      forward(50);
+  }
+
+
+  delay(10);
 }
