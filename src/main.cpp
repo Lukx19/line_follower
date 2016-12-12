@@ -137,68 +137,69 @@ void stateStandard() {
     turnCurve(30, 50);
   } else if (ir_sensors[2]) {
     forward(150);
-  } else { // finding line
-           // turn90(-30);
+  } else {
+    // finding line
+    // turn90(-30);
     forward(50);
   }
+}
 
-  void stateExpectingCrossroads() {
-    timeout_ = timeout_delay;
-    stateStandard();
+void stateExpectingCrossroads() {
+  timeout_ = timeout_delay;
+  stateStandard();
+}
+
+void stateOnFork() { stop(); }
+
+void loop() {
+  readInfra();
+  Serial.println(buttonDown());
+  debugInfra();
+
+  if (buttonDown()) {
+    start = true;
+  }
+  if (!start) {
+    stop();
+    return;
+  }
+  switch (state_) {
+  case STANDARD:
+    if (markIsLeft()) {
+      timeout_ = timeout_delay;
+      dir_ = -1;
+      state_ = CROSS_EXPECTED;
+      stateExpectingCrossroads();
+    } else if (markIsRight()) {
+      timeout_ = timeout_delay;
+      dir_ = 1;
+      state_ = CROSS_EXPECTED;
+      stateExpectingCrossroads();
+    } else {
+      state_ = STANDARD;
+      stateStandard();
+    }
+    break;
+  case CROSS_EXPECTED:
+    if (crossRoads()) {
+      state_ = FORK;
+      // move straight and
+      forward(150);
+
+      stateOnFork();
+    } else {
+      stateExpectingCrossroads();
+    }
+    break;
+  case FORK:
+    if (crossRoads()) {
+      state_ = STANDARD;
+      stateStandard();
+    } else {
+      stateOnFork();
+    }
+    break;
   }
 
-  void stateOnFork() {}
-
-  void loop() {
-    readInfra();
-    Serial.println(buttonDown());
-    debugInfra();
-
-    if (buttonDown()) {
-      start = true;
-    }
-    if (!start) {
-      stop();
-      return;
-    }
-    switch (state_) {
-    case STANDARD:
-      if (markIsLeft()) {
-        timeout_ = timeout_delay;
-        dir_ = -1;
-        state_ = CROSS_EXPECTED;
-        stateExpectingCrossroads();
-      } else if (markIsRight()) {
-        timeout_ = timeout_delay;
-        dir_ = 1;
-        state_ = CROSS_EXPECTED;
-        stateExpectingCrossroads();
-      } else {
-        state_ = STANDARD;
-        stateStandard();
-      }
-      break;
-    case CROSS_EXPECTED:
-      if (crossRoads()) {
-        state_ = FORK;
-        // move straight and
-        forward(150);
-
-        stateOnFork();
-      } else {
-        stateExpectingCrossroads();
-      }
-      break;
-    case FORK:
-      if (crossRoads()) {
-        state_ = STANDARD;
-        stateStandard();
-      } else {
-        stateOnFork();
-      }
-      break;
->>>>>>> Adding states to crossroads detection
-    }
-
-    delay(10);
-  }
+  delay(10);
+}
