@@ -2,6 +2,7 @@
 #include <Servo.h>
 
 #define button_pin 2
+#define LED_pin 11
 #define first_infra 3
 #define timeout_delay 1000
 #define STOP_SPEED 1500
@@ -19,22 +20,34 @@ Dir route_;
 enum State { STANDARD, FORK, CROSS_EXPECTED, PASS_MARKER, STOP };
 State state_;
 
-struct Counters {
-  int left_ir;
-  int right_ir;
-} csensors;
-void setCountersZero(Counters *c) {
-  c->left_ir = 0;
-  c->right_ir = 0;
+void LEDOn() { digitalWrite(11, HIGH); }
+void LEDOff() { digitalWrite(11, LOW); }
+void LEDBlink(size_t blinks) {
+  LEDOff();
+  for (size_t i = 0; i < blinks; ++i) {
+    LEDOn();
+    delay(100);
+    LEDOff();
+    delay(100);
+  }
 }
-void incCounters(bool *sensors, Counters *c) {
-  if (sensors[0])
-    ++(c->left_ir);
-  if (sensors[4])
-    ++(c->right_ir);
-}
-
 bool buttonDown() { return !digitalRead(button_pin); }
+
+size_t countPresses() {
+  unsigned long start = millis();
+  bool down = false;
+  size_t presses = 0;
+  while (millis() - start < 3000) {
+    if (buttonDown() && down == false) {
+      ++presses;
+      down = true;
+    } else {
+      down = false;
+    }
+    delay(100);
+  }
+  return presses;
+}
 
 void forward(int speed = 200) {
   left.write(STOP_SPEED + speed);
@@ -148,12 +161,20 @@ void setup() {
   right.attach(13);
   // button
   pinMode(button_pin, INPUT_PULLUP);
-
+  // LED
+  pinMode(LED_pin, OUTPUT);
   stop();
   // setup infa array
   for (int i = first_infra; i < first_infra + sizeof(ir_sensors); ++i) {
     pinMode(i, INPUT);
   }
+
+  LEDOn();
+  size_t presses = countPresses();
+  Serial.println(presses);
+  LEDOff();
+  delay(300);
+  LEDBlink(presses);
 }
 
 void execStandard() {
