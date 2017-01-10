@@ -140,9 +140,12 @@ bool splitRoads() {
     return false;
 }
 bool mergeRoads(Dir dir) {
-  if (ir_sensors[0] && dir == RIGHT)
-    return true;
-  if (ir_sensors[4] && dir == LEFT)
+  // if (ir_sensors[0] && dir == RIGHT)
+  //   return true;
+  // if (ir_sensors[4] && dir == LEFT)
+  //   return true;
+  // return false;
+  if ((ir_sensors[1] && ir_sensors[3]))
     return true;
   return false;
 }
@@ -176,7 +179,6 @@ void setup() {
   delay(300);
   LEDBlink(presses);
 }
-
 void execStandard() {
   if (find_middle) {
     if (ir_sensors[2])
@@ -195,19 +197,48 @@ void execStandard() {
   //   delay(50);
   // } else
   if (ir_sensors[1]) {
-    turn90(LEFT, 40);
+    turnCurve(100, LEFT, 80);
     delay(50);
   } else if (ir_sensors[3]) {
-    turn90(RIGHT, 40);
+    turnCurve(100, RIGHT, 80);
     delay(50);
   } else if (ir_sensors[2]) {
-    forward(150);
+    forward(50);
   } else { // finding line
     turn90(LEFT, 30);
     // forward(50);
   }
 }
 
+void execStandardLeft() {
+  readInfra();
+  if (ir_sensors[3]) {
+    turnCurve(100, RIGHT, 80);
+    delay(50);
+  } else if (ir_sensors[2]) {
+    forward(50);
+  } else { // finding line
+    turn90(LEFT, 30);
+    // forward(50);
+  }
+}
+
+void execStandardRight() {
+  readInfra();
+  if (ir_sensors[1]) {
+    turnCurve(100, LEFT, 80);
+    delay(50);
+  } else if (ir_sensors[2]) {
+    forward(50);
+  } else { // finding line
+    turn90(LEFT, 30);
+    // forward(50);
+  }
+}
+void execStandardSensorRead() {
+  readInfra();
+  execStandard();
+}
 void execExpectingCrossroads() { forward(150); }
 
 void execOnFork() { execStandard(); }
@@ -217,7 +248,11 @@ void loop() {
   readInfra();
   // Serial.println(buttonDown());
   // debugInfra();
-
+  if (mergeRoads(LEFT)) {
+    LEDOn();
+  } else {
+    LEDOff();
+  }
   if (buttonDown()) {
     start = true;
   }
@@ -248,14 +283,15 @@ void loop() {
       if (route_ == LEFT) {
         rotateWhileSensor(false, 4, 80, LEFT);
         rotateWhileSensor(true, 4, 80, LEFT);
-        rotateWhileSensor(false, 4, 80, LEFT);
+        // rotateWhileSensor(false, 4, 80, LEFT);
         rotateWhileSensor(false, 2, 100, RIGHT);
       } else {
         rotateWhileSensor(false, 0, 80, RIGHT);
         rotateWhileSensor(true, 0, 80, RIGHT);
-        rotateWhileSensor(false, 0, 80, RIGHT);
+        // rotateWhileSensor(false, 0, 80, RIGHT);
         rotateWhileSensor(false, 2, 100, LEFT);
       }
+      doAction(execStandardSensorRead, 1000);
       state_ = FORK;
     } else {
       state_ = CROSS_EXPECTED;
@@ -264,17 +300,27 @@ void loop() {
     break;
   case FORK:
     if (mergeRoads(route_)) {
-      state_ = STANDARD;
-      if (route_ == LEFT) {
-        forwardWhileSensor(false, 0, 150);
-        rotateWhileSensor(false, 4, 100, LEFT);
-        rotateWhileSensor(false, 2, -100, RIGHT);
+      doAction(stop, 2000);
+      if (route_ == RIGHT) {
+        doAction(execStandardLeft, 500);
       } else {
-        forwardWhileSensor(false, 4, 150);
-        rotateWhileSensor(false, 0, 100, RIGHT);
-        rotateWhileSensor(false, 2, 100, LEFT);
+        doAction(execStandardRight, 500);
       }
-      execStandard();
+      // forwWhileSensor(true, 0, 100);  sssssdf
+
+      // forwardWhileSensor(true, 4, 100);
+      // doAction(forward, 300);
+      doAction(stop, 2000);
+      state_ = STANDARD;
+      // if (route_ == LEFT) {
+      //   forwardWhileSensor(false, 4, 150);
+      //   rotateWhileSensor(false, 4, 100, LEFT);
+      //   rotateWhileSensor(false, 2, 100, RIGHT);
+      // } else {
+      //   forwardWhileSensor(false, 0, 150);
+      //   rotateWhileSensor(false, 0, 100, RIGHT);
+      //   rotateWhileSensor(false, 2, 100, LEFT);
+      // }
     } else {
       state_ = FORK;
       execOnFork();
