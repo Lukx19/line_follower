@@ -99,6 +99,7 @@ void readInfra() {
   }
 }
 
+// Detects hint on the right side
 bool markIsRight() {
   if (ir_sensors[4] && !ir_sensors[1] && !ir_sensors[3]) {
     return true;
@@ -106,12 +107,15 @@ bool markIsRight() {
   return false;
 }
 
+// Detects hint on the left side
 bool markIsLeft() {
   if (ir_sensors[0] && !ir_sensors[1] && !ir_sensors[3]) {
     return true;
   }
   return false;
 }
+
+// rotate while the sensor with sensor_id has value of on_line
 // slope 100 - 90deg turning
 void rotateWhileSensor(bool on_line, int sensor_id, unsigned int slope, Dir dir,
                        unsigned int speed = 50) {
@@ -125,6 +129,7 @@ void rotateWhileSensor(bool on_line, int sensor_id, unsigned int slope, Dir dir,
   }
   stop();
 }
+// move forwad until the sensor with sensor_id hase value of on_line
 void forwardWhileSensor(bool on_line, int sensor_id, int speed) {
   while (ir_sensors[sensor_id] == on_line) {
     forward(speed);
@@ -134,6 +139,7 @@ void forwardWhileSensor(bool on_line, int sensor_id, int speed) {
   stop();
 }
 
+// call arbitrary function for specified number of seconds
 void doAction(void fce(), unsigned int ms) {
   unsigned long start = millis();
   while (millis() - start < ms) {
@@ -141,12 +147,14 @@ void doAction(void fce(), unsigned int ms) {
   }
 }
 
+// Detects road split
 bool splitRoads() {
   if (ir_sensors[0] || ir_sensors[4])
     return true;
   else
     return false;
 }
+// Detects two road merge
 bool mergeRoads() {
   if ((ir_sensors[1] && ir_sensors[3]) || (ir_sensors[2] && ir_sensors[4]) ||
       (ir_sensors[2] && ir_sensors[0]))
@@ -215,6 +223,7 @@ void setup() {
     turn_based_on_marks = false;
   }
 }
+// standard line following on line without forks and merges
 void execStandard() {
   if (find_middle) {
     if (ir_sensors[2])
@@ -240,6 +249,14 @@ void execStandard() {
   }
 }
 
+// standard line following with additional read of infra sensors in every call
+// of this method. Used mostly in doAction method
+void execStandardSensorRead() {
+  readInfra();
+  execStandard();
+}
+
+// uses only right sensor to line follow. It is used in doAction.
 void execStandardLeft() {
   readInfra();
   if (ir_sensors[3]) {
@@ -253,7 +270,7 @@ void execStandardLeft() {
     last_dir = LEFT;
   }
 }
-
+// uses only left sensor to line follow. It is used in doAction.
 void execStandardRight() {
   readInfra();
   if (ir_sensors[1]) {
@@ -267,12 +284,8 @@ void execStandardRight() {
     last_dir = RIGHT;
   }
 }
-void execStandardSensorRead() {
-  readInfra();
-  execStandard();
-}
-void execExpectingCrossroads() { forward(150); }
 
+void execExpectingCrossroads() { forward(150); }
 void execOnFork() { execStandard(); }
 void execPassMarker() { execStandard(); }
 
@@ -280,11 +293,12 @@ void loop() {
   readInfra();
   // Serial.println(buttonDown());
   // debugInfra();
-  if (mergeRoads()) {
-    LEDOn();
-  } else {
-    LEDOff();
-  }
+  // if (mergeRoads()) {
+  //   LEDOn();
+  // } else {
+  //   LEDOff();
+  // }
+  // pprogram starts after the button is pressed
   if (buttonDown()) {
     start = true;
   }
@@ -295,11 +309,12 @@ void loop() {
 
   switch (state_) {
   case STANDARD:
+    // This state describes robot movement on regular line. It also searches for
+    // hints in order to change the state.
     if (markIsLeft()) {
-      doAction(stop, 2000);
+      // doAction(stop, 2000);
       // select route based on marker side or oposite if it is configured in
-      // setup
-      // phase
+      // setup phase
       if (turn_based_on_marks)
         route_ = LEFT;
       else
@@ -307,10 +322,9 @@ void loop() {
       state_ = PASS_MARKER;
       doAction(execStandardSensorRead, DIST_PASS_MARK);
     } else if (markIsRight()) {
-      doAction(stop, 2000);
+      // doAction(stop, 2000);
       // select route based on marker side or oposite if it is configured in
-      // setup
-      // phase
+      // setup phase
       if (turn_based_on_marks)
         route_ = RIGHT;
       else
@@ -323,8 +337,10 @@ void loop() {
     }
     break;
   case CROSS_EXPECTED:
+    // This state is used after sucesfull hint detection. The robot moves to
+    // crossroads and selects correct path.
     if (splitRoads()) {
-      doAction(stop, 2000);
+      // doAction(stop, 2000);
       if (route_ == LEFT) {
         rotateWhileSensor(false, 4, SPLIT_CURVE, LEFT, SPLIT_SPEED);
         rotateWhileSensor(true, 4, SPLIT_CURVE, LEFT, SPLIT_SPEED);
@@ -337,7 +353,7 @@ void loop() {
         rotateWhileSensor(false, 2, 100, LEFT);
       }
       doAction(execStandardSensorRead, DIST_PASS_FORK);
-      doAction(stop, 2000);
+      // doAction(stop, 2000);
 
       state_ = FORK;
     } else {
@@ -348,6 +364,7 @@ void loop() {
   case FORK:
     // this state is used when the robot detected crossroad and is on one of the
     // two possible paths (forks)
+    LEDOn();
     if (mergeRoads()) {
       // two paths are merging together.
       if (route_ == RIGHT) {
@@ -355,8 +372,9 @@ void loop() {
       } else {
         doAction(execStandardRight, DIST_PASS_MERGE);
       }
-      doAction(stop, 2000);
+      // doAction(stop, 2000);
       state_ = STANDARD;
+      LEDOff();
     } else {
       state_ = FORK;
       execOnFork();
@@ -364,6 +382,8 @@ void loop() {
     break;
 
   case PASS_MARKER:
+    // This state helps to the robot to pass the hint marker.
+    // multiple times.
     if (markIsLeft() || markIsRight()) {
       state_ = PASS_MARKER;
       execStandard();
