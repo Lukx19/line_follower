@@ -6,8 +6,14 @@
 #define first_infra 3
 #define timeout_delay 1000
 #define STOP_SPEED 1500
-#define LEFT_DIR = -1
-#define RIGHT_DIR = 1
+#define DIST_PASS_MARK 500
+#define DIST_PASS_MERGE 900
+#define DIST_PASS_FORK 900
+#define COMPENSATION_DELAY 50
+#define SPLIT_CURVE 60
+#define SPLIT_SPEED 30
+#define MOVE_CURVE 100
+#define MOVE_SPEED 80
 Servo left;
 Servo right;
 
@@ -19,6 +25,8 @@ enum Dir { LEFT, RIGHT };
 Dir route_;
 enum State { STANDARD, FORK, CROSS_EXPECTED, PASS_MARKER, STOP };
 State state_;
+bool turn_based_on_marks = true;
+Dir last_dir = LEFT;
 
 void LEDOn() { digitalWrite(11, HIGH); }
 void LEDOff() { digitalWrite(11, LOW); }
@@ -139,13 +147,10 @@ bool splitRoads() {
   else
     return false;
 }
-bool mergeRoads(Dir dir) {
-  // if (ir_sensors[0] && dir == RIGHT)
-  //   return true;
-  // if (ir_sensors[4] && dir == LEFT)
-  //   return true;
-  // return false;
-  if ((ir_sensors[1] && ir_sensors[3]))
+bool mergeRoads() {
+  if ((ir_sensors[1] && ir_sensors[3]) || (ir_sensors[2] && ir_sensors[4]) ||
+      (ir_sensors[2] && ir_sensors[0]))
+    //  if ((ir_sensors[1] && ir_sensors[3]))
     return true;
   return false;
 }
@@ -153,6 +158,33 @@ bool isTimeout() {
   if (timeout_ > 0) {
     --timeout_;
     return true;
+  }
+  return false;
+}
+
+bool shakeOnMergeRoads() {
+  if (ir_sensors[0] || ir_sensors[4]) {
+    unsigned long start = millis();
+    while (millis() - start < 200) {
+      turnCurve(100, RIGHT);
+      readInfra();
+      if (mergeRoads())
+        return true;
+    }
+    start = millis();
+    while (millis() - start < 400) {
+      turnCurve(100, LEFT);
+      readInfra();
+      if (mergeRoads())
+        return true;
+    }
+    start = millis();
+    while (millis() - start < 200) {
+      turnCurve(100, RIGHT);
+      readInfra();
+      if (mergeRoads())
+        return true;
+    }
   }
   return false;
 }
@@ -178,6 +210,10 @@ void setup() {
   LEDOff();
   delay(300);
   LEDBlink(presses);
+  turn_based_on_marks = true;
+  if (presses == 2) {
+    turn_based_on_marks = false;
+  }
 }
 void execStandard() {
   if (find_middle) {
@@ -186,53 +222,49 @@ void execStandard() {
     else
       return;
   }
-
-  // if (ir_sensors[0]) {
-  //   turn90(-140);
-  //   find_middle = true;
-  //   delay(50);
-  // } else if (ir_sensors[4]) {
-  //   turn90(140);
-  //   find_middle = true;
-  //   delay(50);
-  // } else
   if (ir_sensors[1]) {
-    turnCurve(100, LEFT, 80);
-    delay(50);
+    turnCurve(MOVE_CURVE, LEFT, MOVE_SPEED);
+    delay(COMPENSATION_DELAY);
+    last_dir = LEFT;
   } else if (ir_sensors[3]) {
-    turnCurve(100, RIGHT, 80);
-    delay(50);
+    turnCurve(MOVE_CURVE, RIGHT, MOVE_SPEED);
+    last_dir = RIGHT;
+    delay(COMPENSATION_DELAY);
   } else if (ir_sensors[2]) {
     forward(50);
   } else { // finding line
+           //  if (last_dir == LEFT)
     turn90(LEFT, 30);
-    // forward(50);
+    //  else
+    //    turn90(RIGHT, 30);
   }
 }
 
 void execStandardLeft() {
   readInfra();
   if (ir_sensors[3]) {
-    turnCurve(100, RIGHT, 80);
-    delay(50);
+    turnCurve(MOVE_CURVE, RIGHT, MOVE_SPEED);
+    last_dir = RIGHT;
+    delay(COMPENSATION_DELAY);
   } else if (ir_sensors[2]) {
     forward(50);
   } else { // finding line
     turn90(LEFT, 30);
-    // forward(50);
+    last_dir = LEFT;
   }
 }
 
 void execStandardRight() {
   readInfra();
   if (ir_sensors[1]) {
-    turnCurve(100, LEFT, 80);
-    delay(50);
+    turnCurve(MOVE_CURVE, LEFT, MOVE_SPEED);
+    last_dir = LEFT;
+    delay(COMPENSATION_DELAY);
   } else if (ir_sensors[2]) {
     forward(50);
   } else { // finding line
-    turn90(LEFT, 30);
-    // forward(50);
+    turn90(RIGHT, 30);
+    last_dir = RIGHT;
   }
 }
 void execStandardSensorRead() {
@@ -248,7 +280,7 @@ void loop() {
   readInfra();
   // Serial.println(buttonDown());
   // debugInfra();
-  if (mergeRoads(LEFT)) {
+  if (mergeRoads()) {
     LEDOn();
   } else {
     LEDOff();
@@ -264,15 +296,27 @@ void loop() {
   switch (state_) {
   case STANDARD:
     if (markIsLeft()) {
-      timeout_ = timeout_delay;
-      route_ = LEFT;
+      doAction(stop, 2000);
+      // select route based on marker side or oposite if it is configured in
+      // setup
+      // phase
+      if (turn_based_on_marks)
+        route_ = LEFT;
+      else
+        route_ = RIGHT;
       state_ = PASS_MARKER;
-      doAction(execStandard, 500);
+      doAction(execStandardSensorRead, DIST_PASS_MARK);
     } else if (markIsRight()) {
-      timeout_ = timeout_delay;
-      route_ = RIGHT;
+      doAction(stop, 2000);
+      // select route based on marker side or oposite if it is configured in
+      // setup
+      // phase
+      if (turn_based_on_marks)
+        route_ = RIGHT;
+      else
+        route_ = LEFT;
       state_ = PASS_MARKER;
-      doAction(execStandard, 500);
+      doAction(execStandardSensorRead, DIST_PASS_MARK);
     } else {
       state_ = STANDARD;
       execStandard();
@@ -280,18 +324,21 @@ void loop() {
     break;
   case CROSS_EXPECTED:
     if (splitRoads()) {
+      doAction(stop, 2000);
       if (route_ == LEFT) {
-        rotateWhileSensor(false, 4, 80, LEFT);
-        rotateWhileSensor(true, 4, 80, LEFT);
-        // rotateWhileSensor(false, 4, 80, LEFT);
+        rotateWhileSensor(false, 4, SPLIT_CURVE, LEFT, SPLIT_SPEED);
+        rotateWhileSensor(true, 4, SPLIT_CURVE, LEFT, SPLIT_SPEED);
+        rotateWhileSensor(false, 4, SPLIT_CURVE, LEFT, SPLIT_SPEED);
         rotateWhileSensor(false, 2, 100, RIGHT);
       } else {
-        rotateWhileSensor(false, 0, 80, RIGHT);
-        rotateWhileSensor(true, 0, 80, RIGHT);
-        // rotateWhileSensor(false, 0, 80, RIGHT);
+        rotateWhileSensor(false, 0, SPLIT_CURVE, RIGHT, SPLIT_SPEED);
+        rotateWhileSensor(true, 0, SPLIT_CURVE, RIGHT, SPLIT_SPEED);
+        rotateWhileSensor(false, 0, SPLIT_CURVE, RIGHT, SPLIT_SPEED);
         rotateWhileSensor(false, 2, 100, LEFT);
       }
-      doAction(execStandardSensorRead, 1000);
+      doAction(execStandardSensorRead, DIST_PASS_FORK);
+      doAction(stop, 2000);
+
       state_ = FORK;
     } else {
       state_ = CROSS_EXPECTED;
@@ -299,28 +346,17 @@ void loop() {
     }
     break;
   case FORK:
-    if (mergeRoads(route_)) {
-      doAction(stop, 2000);
+    // this state is used when the robot detected crossroad and is on one of the
+    // two possible paths (forks)
+    if (mergeRoads()) {
+      // two paths are merging together.
       if (route_ == RIGHT) {
-        doAction(execStandardLeft, 500);
+        doAction(execStandardLeft, DIST_PASS_MERGE);
       } else {
-        doAction(execStandardRight, 500);
+        doAction(execStandardRight, DIST_PASS_MERGE);
       }
-      // forwWhileSensor(true, 0, 100);  sssssdf
-
-      // forwardWhileSensor(true, 4, 100);
-      // doAction(forward, 300);
       doAction(stop, 2000);
       state_ = STANDARD;
-      // if (route_ == LEFT) {
-      //   forwardWhileSensor(false, 4, 150);
-      //   rotateWhileSensor(false, 4, 100, LEFT);
-      //   rotateWhileSensor(false, 2, 100, RIGHT);
-      // } else {
-      //   forwardWhileSensor(false, 0, 150);
-      //   rotateWhileSensor(false, 0, 100, RIGHT);
-      //   rotateWhileSensor(false, 2, 100, LEFT);
-      // }
     } else {
       state_ = FORK;
       execOnFork();
@@ -340,6 +376,5 @@ void loop() {
     stop();
     break;
   }
-
   delay(10);
 }
